@@ -638,6 +638,20 @@ private_k for connecting to server
 settings_env file required for [DB_PROXY](https://github.com/StealLine/PROXY_DB_APP)
 Sonar host and sonar token required for sonarqube server to be working properly
 
+How all works:
+1) Developer creating new feature and  merging his branch to main
+<img width="1940" height="1054" alt="image" src="https://github.com/user-attachments/assets/f7afa1b0-e837-46fc-a522-9b5c0edb82f0" />
+2) Merge pipeline is running and preview environment is deployed 
+   <img width="1153" height="173" alt="image" src="https://github.com/user-attachments/assets/b1a36738-5a54-4b8f-8482-be400feb306d" />
+3) Preview environment running on server, each preview is independent
+  <img width="675" height="442" alt="image" src="https://github.com/user-attachments/assets/2a35b75f-119a-4337-af0f-be68670938fd" />
+4) For each deployment password and login creating for user this all managed by traefik
+   <img width="1192" height="104" alt="image" src="https://github.com/user-attachments/assets/2c76ac85-7bf8-4c6c-811b-89cb8212d2ef" />
+
+
+
+
+
 
 
 
