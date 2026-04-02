@@ -1,0 +1,17 @@
+workflow:
+  name: 'Pipeline for branch: $CI_COMMIT_BRANCH' # name of the workflow
+  auto_cancel: # we can interrupt jobs in this pipeline
+    on_new_commit: interruptible # default interruptible is true
+  rules: # rules when to run the pipeline
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH # first rule if the commit is on the default branch
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_COMMIT_REF_NAME =~ /^feature\-.+$/' #only if
+    #branch name feature-... and only for merge requests
+    - when: never  # not running for other cases
+
+stages: # stages of the pipeline
+  - lint
+  - build
+  - test
+  - docker_build
+  - preview_deploy
+  - deploy
