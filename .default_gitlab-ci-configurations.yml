@@ -1,0 +1,54 @@
+default: # default configuration for most of the jobs
+  image: registry.gitlab.com/your-namespace/your-project/dotnet-sdk:8.0-alpine # here either your gitlab registry image or just  mcr.microsoft.com/dotnet/sdk:8.0-alpine
+  interruptible: true
+
+.default_dind_images:
+  image: registry.gitlab.com/your-namespace/your-project/docker-cli:29.3.1-cli-alpine3.23 # same as explained above for default
+  services:
+    - registry.gitlab.com/your-namespace/your-project/docker-dind:29.3.1-dind-alpine3.23 # same as explained above for default
+
+variables:
+  NUGET_PACKAGES: "$CI_PROJECT_DIR/.nuget/packages"
+  POSTGRES_HOST: postg
+  POSTGRES_PORT: 5432
+  POSTGRES_PASSWORD: postgres
+  POSTGRES_USER: postgres
+  POSTGRES_DB: postgres
+  XUNIT_REPORT_PATH: "$CI_PROJECT_DIR/test-results.xml"
+  PATH_TO_TEST_CSPROJ: TEST_PROXY/TEST_PROXY.csproj
+  SERVER_IP: # ip-of-server-where-deploying
+  SERVER_ACCOUNT: # deploying-user
+  PREVIEW_USER: $GITLAB_USER_LOGIN
+  PREVIEW_PASS: $CI_COMMIT_SHORT_SHA
+  DEPLOY_PATH: # path for preview deployment (in my case was /home/deploy-app-cryptovault/proxy-db/preview/$CI_COMMIT_REF_SLUG)
+.default_before_script: # some utils req to join server via ssh
+  script:
+     - apk add --no-cache curl
+     - apk add --no-cache openssh-client
+     - apk add --no-cache apache2-utils
+     - mkdir -p ~/.ssh
+     - chmod 700 ~/.ssh
+
+     - echo "$PRIVATE_K" | base64 -d > MyKey.pem
+     - chmod 400 MyKey.pem
+
+     - echo "$KNOWN_HOSTS" | base64 -d > ~/.ssh/known_hosts
+     - chmod 644 ~/.ssh/known_hosts
+
+     - eval $(ssh-agent)
+     - ssh-add MyKey.pem
+     - echo "$SETTINGS_ENV" | base64 -d > settings.env
+
+.default_after_script_filecopy_andrun: # default deploy script
+  script:
+      - ssh $SERVER_ACCOUNT@$SERVER_IP mkdir -p $DEPLOY_PATH
+
+      - scp docker-compose.yml settings.env $SERVER_ACCOUNT@$SERVER_IP:$DEPLOY_PATH
+
+      - |
+        ssh $SERVER_ACCOUNT@$SERVER_IP "
+          cd $DEPLOY_PATH &&
+          echo \"$CI_REGISTRY_PASSWORD\" | docker login -u \"$CI_REGISTRY_USER\" --password-stdin $CI_REGISTRY &&
+          docker compose pull &&
+          docker compose up -d
+        
