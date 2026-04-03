@@ -1,0 +1,63 @@
+services:
+  traefik:
+    image: traefik:v3.6  # Reverse proxy and load balancer
+    container_name: traefik
+    restart: unless-stopped  # Restart container unless manually stopped
+
+    command:
+      - "--log.level=DEBUG"  # Enable detailed logs
+      - "--accesslog=true"  # Enable HTTP access logs
+
+      # Delay before checking DNS challenge (helps with DNS propagation)
+      - "--certificatesresolvers.le.acme.dnschallenge.delaybeforecheck=10"
+
+      - "--api.insecure=false"  # Disable insecure dashboard access
+
+      # Enable Docker provider so Traefik can discover containers
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"  # Containers must be explicitly exposed
+
+      # Define HTTP and HTTPS entrypoints
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.websecure.address=:443"
+
+      # Enable TLS on HTTPS entrypoint
+      - "--entryPoints.websecure.http.tls=true"
+      - "--entrypoints.websecure.http.tls.certresolver=le"
+
+      # Redirect HTTP traffic to HTTPS
+      - "--entryPoints.web.http.redirections.entryPoint.to=websecure"
+      - "--entryPoints.web.http.redirections.entryPoint.scheme=https"
+
+      # Enable Let's Encrypt DNS challenge
+      - "--certificatesresolvers.le.acme.dnschallenge=true"
+      - "--certificatesresolvers.le.acme.dnschallenge.provider=cloudflare"
+
+      # Email used for Let's Encrypt certificate registration
+      - "--certificatesresolvers.le.acme.email=(here was my email)"
+
+      # File where certificates will be stored
+      - "--certificatesresolvers.le.acme.storage=/letsencrypt/acme.json"
+
+    ports:
+      - "80:80"   # HTTP
+      - "443:443" # HTTPS
+
+    environment:
+      - CF_API_EMAIL=(here was my email)  # Cloudflare account email
+      - CF_DNS_API_TOKEN=(here was my private cloudflare token)  # Token for DNS challenge
+
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro  # Allow Traefik to read Docker containers
+      - ./letsencrypt:/letsencrypt  # Persist SSL certificates
+
+    networks:
+      - traefik_network
+      - deploy_net
+
+networks:
+  deploy_net:
+    external: true  # network for deploy environment
+
+  traefik_network:
+    external: true  # Network used by Traefik to route traffic for preview environments
