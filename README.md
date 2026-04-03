@@ -1,165 +1,171 @@
-# GITLAB-CI-PROJECT
+# GitLab CI Project
 
-## This project consist of total 2 apps
-[DB_PROXY](https://github.com/StealLine/PROXY_DB_APP)  AND
-[Frontend](https://github.com/StealLine/Frontend-Crypto-Rate-Checker)
+> A pet project demonstrating a simplified end-to-end DevOps workflow — build, test, containerize, SAST scan, preview deploy, and production deploy.
 
----
-⚠️ **Note about the CI/CD configuration**
-
-The GitLab CI configuration and deployment logic in this repository are **not intended to represent a production-grade setup**. Some variables are intentionally hardcoded and certain values may be exposed in the configuration.
-
-This project is a **personal pet project** whose primary goal was to demonstrate the ability to design and implement a **simplified end-to-end DevOps workflow**, including build, test, containerization, sast testing, preview deployment, and actual deployment stages .
-
-The focus of this repository was on **showcasing practical DevOps skills and understanding of the overall pipeline**, rather than achieving a perfectly secure or fully optimized production configuration.
-
-Implementing a completely production-ready infrastructure (with proper secret management, environment separation, infrastructure automation, etc.) would significantly increase the scope and complexity of the project and require considerably more time than is reasonable for a single-developer pet project.
-
-Therefore, some **simplifications and trade-offs were intentionally made** to keep the project manageable while still demonstrating the core concepts of CI/CD and deployment automation.
+This project consists of **two applications**:
+- [DB_PROXY](https://github.com/StealLine/PROXY_DB_APP)
+- [Frontend — Crypto Rate Checker](https://github.com/StealLine/Frontend-Crypto-Rate-Checker)
 
 ---
-## DB_PROXY DEVOPS LOGIC
-DB_PROXY ci/cd pipeline realization was implemented using Gitlab
-This is how merge request  to main branch pipeline looks like
-<img width="2916" height="367" alt="image" src="https://github.com/user-attachments/assets/90fc4707-116e-41e4-9c2a-d59cd8cb8ed0" />
-And for main
-<img width="1991" height="742" alt="image" src="https://github.com/user-attachments/assets/739f8437-d754-4e67-bffc-d14ba6e8b876" />
 
-The `.gitlab-ci.yml` file in [DB_PROXY](https://github.com/StealLine/PROXY_DB_APP) references a separate project where the CI/CD pipeline configuration is stored. This approach allows dynamic pipeline configuration changes without unnecessary commits to the main project.
- 
-> **Note:** These configurations may not include all best practices. Some pipeline stages such as dependency scanning and DAST testing are intentionally omitted. Additionally, images like `mcr.microsoft.com/dotnet/sdk:8.0-alpine` could be stored in the GitLab registry for improved performance.
-### `.default_gitlab-ci-configurations.yml`
-> look for explanation and the code of the file in this repository 
+> ⚠️ **Disclaimer**
+>
+> The GitLab CI configuration and deployment logic here are **not intended for production use**. Some variables are intentionally hardcoded and certain values may be exposed. The primary goal was to demonstrate the ability to design and implement a **simplified end-to-end DevOps workflow**.
+>
+> Implementing a fully production-ready infrastructure (proper secret management, environment separation, IaC, etc.) would significantly exceed the scope of a single-developer pet project. **Intentional simplifications and trade-offs were made** to keep the project manageable while showcasing core CI/CD concepts. AND THIS IS MY FIRST GITLAB PROJECT!!!
 
-### `.pre_config_settings.yml`
-> look for explanation and the code of the file in this repository 
+---
 
-### `.gitlab-ci.yml`
-> look for explanation and the code of the file in this repository 
+## DB_PROXY — CI/CD Pipeline
 
-And now .gitlab-ci.yml file where the source code is stored (in this repository all developers pushing their code)
-<img width="788" height="600" alt="image" src="https://github.com/user-attachments/assets/a0425615-cc7f-409f-bed7-c6382b2723b2" />
+The CI/CD pipeline for DB_PROXY is implemented using GitLab CI.
 
+### Merge Request Pipeline
 
-### `.gitlab-ci.yml in the main project (to where is developers pushing)`
+![MR Pipeline](https://github.com/user-attachments/assets/90fc4707-116e-41e4-9c2a-d59cd8cb8ed0)
 
+### Main Branch Pipeline
+
+![Main Pipeline](https://github.com/user-attachments/assets/739f8437-d754-4e67-bffc-d14ba6e8b876)
+
+The `.gitlab-ci.yml` in [DB_PROXY](https://github.com/StealLine/PROXY_DB_APP) references a **separate CI/CD configuration project**. This allows pipeline changes without unnecessary commits to the main codebase.
+
+> **Note:** Some pipeline stages such as dependency scanning and DAST testing are intentionally omitted. Images like `mcr.microsoft.com/dotnet/sdk:8.0-alpine` could optionally be stored in the GitLab registry for better performance.
+
+---
+
+### Configuration Files
+
+| File | Description |
+|------|-------------|
+| `.default_gitlab-ci-configurations.yml` | See explanation and code in this repository |
+| `.pre_config_settings.yml` | See explanation and code in this repository |
+| `.gitlab-ci.yml` | See explanation and code in this repository |
+
+---
+
+### `.gitlab-ci.yml` in the Main Project (Developer Push Target)
+
+![Main project CI config](https://github.com/user-attachments/assets/a0425615-cc7f-409f-bed7-c6382b2723b2)
 ```yaml
 include:
   - project: StealLine-group/CI-cd_project
     ref: main
-    file: .gitlab-ci.yml 
-```
-*It is just taking all the configurations from the project above*
-
----
-## Now GitLab CI/CD variables:
-<img width="1365" height="543" alt="image" src="https://github.com/user-attachments/assets/d89c267d-59dc-4564-9e6c-d75222ee6cef" />
-
-## Required Variables and Secrets
-
-The following variables are required for the CI/CD pipeline to work properly.
-
-- **KNOWN_HOSTS** – public key of the deployment server.  
-  Generated using:
-
-```bash
-ssh-keyscan <server-ip>
+    file: .gitlab-ci.yml
 ```
 
-- **PRIVATE_K** – private SSH key used for connecting to the deployment server. (in this project can be revealed if someone from the dev team will try to, can be fixed with restricting command access via this ssh)
-
-- **SETTINGS_ENV** – configuration file required for  
-  [DB_PROXY](https://github.com/StealLine/PROXY_DB_APP).
-
-- **SONAR_HOST_URL** and **SONAR_TOKEN** – required for integration with the SonarQube server, and usually generated with SonarQube
+*This simply pulls all pipeline configurations from the CI/CD configuration project.*
 
 ---
 
-# How Everything Works
+## GitLab CI/CD Variables
 
-## 1. Developer creates an issue or work item in milestone or etc.
+![CI/CD Variables](https://github.com/user-attachments/assets/d89c267d-59dc-4564-9e6c-d75222ee6cef)
 
-A developer creates a new feature branch and opens a merge request to the main branch.
+### Required Variables
 
-<img width="1354" height="1161" alt="image" src="https://github.com/user-attachments/assets/14003d9e-a3dc-43f3-983b-56207960b20e" />
-
-
+| Variable | Description |
+|----------|-------------|
+| `KNOWN_HOSTS` | Public key of the deployment server. Generated via `ssh-keyscan <server-ip>` |
+| `PRIVATE_K` | Private SSH key for connecting to the deployment server *(note: can be exposed by team members — fixable by restricting SSH command access)* |
+| `SETTINGS_ENV` | Configuration file required by [DB_PROXY](https://github.com/StealLine/PROXY_DB_APP) |
+| `SONAR_HOST_URL` | SonarQube server URL |
+| `SONAR_TOKEN` | SonarQube authentication token |
 
 ---
 
-## 2. Merge request pipeline runs and preview environment is deployed
+## How the Workflow Works
+
+### 1. Developer Creates a Feature Branch
+
+A developer creates a new feature branch and opens a merge request targeting `main`.
+
+![Issue / MR creation](https://github.com/user-attachments/assets/14003d9e-a3dc-43f3-983b-56207960b20e)
+
+---
+
+### 2. MR Pipeline Runs — Preview Environment Deployed
 
 When the merge request pipeline starts, a **preview environment** is automatically deployed.
 
-<img width="1375" height="939" alt="image" src="https://github.com/user-attachments/assets/fac18dc3-fdb1-4a9d-9568-aa3975711630" />
-
-
-
-## 3. You will be able to see preview environment in gitlab ui 
-<img width="1336" height="455" alt="image" src="https://github.com/user-attachments/assets/7fa99dad-d7f8-4ed6-b65d-87e761c8db24" />
-
+![Preview deploy](https://github.com/user-attachments/assets/fac18dc3-fdb1-4a9d-9568-aa3975711630)
 
 ---
-## 4. Authentication is generated automatically
 
-For each preview deployment:
+### 3. Preview Environment Visible in GitLab UI
 
-- a **login** (just  using gitlab user)
-- a **password**
+![Preview in GitLab](https://github.com/user-attachments/assets/7fa99dad-d7f8-4ed6-b65d-87e761c8db24)
 
-are automatically generated for the user. (As its preview environment and we imagine it is deployed on different server we are openning its DB_PROXY api so developers can test it and do their thigs) 
-p.s in this example everything deployed to a single server
+---
+
+### 4. Authentication Is Auto-Generated
+
+For each preview deployment, a **login** (GitLab username) and **password** are automatically generated.
+
+Since this simulates a preview server, the DB_PROXY API is exposed so developers can test it directly. *(In this example, everything is deployed to a single server.)*
 
 Authentication and routing are managed by **Traefik**.
 
-<img width="1206" height="109" alt="image" src="https://github.com/user-attachments/assets/5045de90-8e7b-4c73-b282-04db569d6443" />
-
-
-## 5. Developer logged in and now they can see desired API
-<img width="1577" height="348" alt="image" src="https://github.com/user-attachments/assets/0fc8f5e7-842c-43d9-b07e-1f9cc3eab786" />
-
-
-## 6. Preview environments runs on the server
-
-Each preview environment is **independent** and runs in its own container stack. (means for preview environment database lives only when environment is working, after environment is stopped it is removed)
-*as we can see new folder with our preview appeared*
-<img width="1137" height="786" alt="image" src="https://github.com/user-attachments/assets/669506f7-8521-42c8-b421-0280c693903e" />
-<img width="3269" height="227" alt="image" src="https://github.com/user-attachments/assets/3fdc19b4-e5fc-431c-aed4-b55ba1a7294d" />
-
-## 7. Sast results can be checked in comments or directly in Sonarqube UI
-
-<img width="957" height="641" alt="image" src="https://github.com/user-attachments/assets/0fd374a6-229b-4e74-a81b-b8533fb9b985" />
-<img width="1692" height="1062" alt="image" src="https://github.com/user-attachments/assets/02a7defa-aa6f-46fb-982a-814219767586" />
-
-## 8. After staging is done all code checked and approved, time for merge. (Merge will autmatically start stop_preview job and launch main pipeline)
-<img width="1388" height="1091" alt="image" src="https://github.com/user-attachments/assets/4ad67af0-1c5c-4b3b-aa2a-711c79cc8134" />
-<img width="1568" height="165" alt="image" src="https://github.com/user-attachments/assets/a0172f7a-23be-4c47-9e79-7473d2b4f732" />
-<img width="2062" height="715" alt="image" src="https://github.com/user-attachments/assets/6893cab7-a97e-4098-a913-ad1885784b8e" />
-
-# It is done, our deployment successfully have been commited to main, we can now easily roll back to previos version by running this special job, but i wont do it for now.
-<img width="475" height="230" alt="image" src="https://github.com/user-attachments/assets/ab6bda4e-4c21-4c23-957a-f37d71434e89" />
-
-<img width="1253" height="647" alt="image" src="https://github.com/user-attachments/assets/bfaebb04-4be0-4c47-8411-dc765e42fce9" />
-
-<img width="1611" height="223" alt="image" src="https://github.com/user-attachments/assets/4bf5f8af-bcc7-465a-8c93-fd5da02639d7" />
-
-*P.S. dont look at opened 9092 port, i was just testing prometheus, in your deploy it should`nt be opened*
-
-
-
-
-
-
-
-
-
+![Auth credentials](https://github.com/user-attachments/assets/5045de90-8e7b-4c73-b282-04db569d6443)
 
 ---
 
-тут ще про траефік і тп
+### 5. Developer Logs In and Accesses the API
 
+![API access](https://github.com/user-attachments/assets/0fc8f5e7-842c-43d9-b07e-1f9cc3eab786)
 
+---
 
+### 6. Each Preview Environment Runs Independently
 
+Each preview is **isolated** in its own container stack. The database is ephemeral — it exists only while the environment is active, and is removed when stopped.
 
+*New preview folder appearing on the server:*
 
+![Server folders](https://github.com/user-attachments/assets/669506f7-8521-42c8-b421-0280c693903e)
+
+![Container stack](https://github.com/user-attachments/assets/3fdc19b4-e5fc-431c-aed4-b55ba1a7294d)
+
+---
+
+### 7. SAST Results via SonarQube
+
+Results are available in MR comments and directly in the SonarQube UI.
+
+![SAST comment](https://github.com/user-attachments/assets/0fd374a6-229b-4e74-a81b-b8533fb9b985)
+
+![SonarQube UI](https://github.com/user-attachments/assets/02a7defa-aa6f-46fb-982a-814219767586)
+
+---
+
+### 8. Code Approved → Merge → Main Pipeline Triggered
+
+Once all checks pass and the MR is approved, merging automatically:
+- Stops the preview environment (`stop_preview` job)
+- Triggers the main branch pipeline
+
+![Merge approval](https://github.com/user-attachments/assets/4ad67af0-1c5c-4b3b-aa2a-711c79cc8134)
+
+![Stop preview](https://github.com/user-attachments/assets/a0172f7a-23be-4c47-9e79-7473d2b4f732)
+
+![Main pipeline run](https://github.com/user-attachments/assets/6893cab7-a97e-4098-a913-ad1885784b8e)
+
+---
+
+## ✅ Deployment Complete
+
+The release has been successfully deployed to `main`. A **rollback job** is available if needed.
+
+![Rollback job](https://github.com/user-attachments/assets/ab6bda4e-4c21-4c23-957a-f37d71434e89)
+
+![Rollback pipeline](https://github.com/user-attachments/assets/bfaebb04-4be0-4c47-8411-dc765e42fce9)
+
+![Deployment result](https://github.com/user-attachments/assets/4bf5f8af-bcc7-465a-8c93-fd5da02639d7)
+
+---
+
+## Traefik Configuration
+
+See the `compose.yml` file in this repository for the full Traefik setup and explanation.
+
+> *Note: The exposed port `9092` visible in some screenshots was used for Prometheus testing only — it should not be open in a real deployment.*
