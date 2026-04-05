@@ -16,7 +16,7 @@ This project consists of **two applications**:
 
 ---
 
-## DB_PROXY — CI/CD Pipeline
+# [DB_PROXY](https://github.com/StealLine/PROXY_DB_APP) — CI/CD Pipeline
 
 The CI/CD pipeline for DB_PROXY is implemented using GitLab CI.
 
@@ -168,4 +168,141 @@ The release has been successfully deployed to `main`. A **rollback job** is avai
 
 See the `compose.yml` file in this repository for the full Traefik setup and explanation.
 
-> *Note: The exposed port `9092` visible in some screenshots was used for Prometheus testing only — it should not be open in a real deployment.*
+> *Note: The exposed port `9092` visible in some screenshots was used for Prometheus testing only for different project — it should not be open in a real deployment.*
+
+
+
+# Frontend — Crypto Rate Checker
+
+> *This part of the application's DevOps cycle is built on the same principles as described in the previous section. Only the key aspects are covered here — for full implementation details, feel free to open a pull request to the repository.*
+
+---
+
+## CI/CD Pipelines
+
+### Merge Request Pipeline
+
+The merge request pipeline is triggered automatically on every MR and runs a sequence of validation and preview deployment stages, ensuring code quality before it ever reaches the main branch.
+
+![Merge Request Pipeline](https://github.com/user-attachments/assets/85043ec6-9454-421f-94bd-326d69336b21)
+
+---
+
+### Main Branch Pipeline
+
+Once a merge request is approved and merged, the main branch pipeline takes over and handles the full production deployment flow.
+
+![Main Branch Pipeline](https://github.com/user-attachments/assets/413cf623-ef0f-4cf5-8ef0-7849e591e8b0)
+
+---
+
+## Developer Workflow
+
+Repository for developers to push their changes in
+
+![Developer Workflow](https://github.com/user-attachments/assets/2cf7c88d-15b1-4433-a135-ebb354be6a3e)
+
+---
+
+## Configurations Repository
+
+All pipeline configuration is centralized in a dedicated **configurations repository**, keeping the developer-facing repository clean and the CI/CD logic versioned separately.
+
+![Configurations Repository](https://github.com/user-attachments/assets/b6072315-06f9-4a19-a9bb-6a3c4beda2dc)
+
+### Key Configuration Files
+
+| File name in this repo | Real name in ci-cd-2 gitlab project |
+|---|---|
+| `conf_gitlab-ci.yml` | .gitlab-ci.yml |
+| `.conf-default_gitlab-ci-configurations.yml` | .default_gitlab-ci-configurations.yml |
+
+The `.gitlab-ci.yml` file in each developer repository simply **references** these centralized files — identical to the approach used in the DB Proxy setup described earlier. 
+
+### GitLab CI/CD Variables
+
+Sensitive values and environment-specific settings are managed through **GitLab CI/CD variables**, mirroring the same conventions used across the project.
+
+![GitLab Variables](https://github.com/user-attachments/assets/ee4fd8ce-50d1-40eb-8bb3-19ac21318b00)
+
+---
+
+## End-to-End Deployment Demo
+
+### 1. Creating a Feature Branch
+
+To demonstrate the full pipeline flow, a new branch was created with a trivial change — adding whitespace to the `.dockerignore` file.
+
+![Branch Creation](https://github.com/user-attachments/assets/00ab3cc3-089d-4f0b-ac9d-3bf458395891)
+
+![Commit](https://github.com/user-attachments/assets/d5ba77ac-320c-439a-a944-3e422892c6d8)
+
+### 2. Merge Request & Pipeline Execution
+
+After opening and merging the MR, the pipeline ran automatically. All stages completed successfully.
+
+![Pipeline Run](https://github.com/user-attachments/assets/1a31bc7d-2d78-4de0-bf19-9ce63b42b200)
+
+### 3. Accessing the Preview Environment
+
+Once the pipeline succeeds, the preview environment becomes accessible via a generated password paired with the user's GitLab username — the same authentication mechanism used for the DB Proxy.
+
+![Preview Access](https://github.com/user-attachments/assets/cdac02c2-134e-41c9-a348-9ba77bd63247)
+
+### 4. Verifying the Deployed Application
+
+After authenticating, the website is reachable and fully functional in the preview environment.
+
+![Website](https://github.com/user-attachments/assets/57d2a493-bc99-444e-b31f-10b04e37aa19)
+
+### 5. Server State
+
+All application containers are confirmed running on the server.
+
+![Running Containers](https://github.com/user-attachments/assets/cd5ddc2f-06da-408e-8de0-b9d6c7acbabb)
+
+The preview environment's configuration files are also present on the host.
+
+![Server Files](https://github.com/user-attachments/assets/5e5b8259-7905-4574-b702-2a49d026eaae)
+
+---
+
+## Preview Environment Teardown
+
+> ⚠️ **Note:** The preview environment currently points to the **production database**. It was easier to implement the code like that but it is not recommended for production-grade workflows.
+
+When a preview environment is stopped, the pipeline sends a `curl` request to a dedicated endpoint that wipes the associated database records.
+
+![Stop Job](https://github.com/user-attachments/assets/ff2d02ac-96d9-4a60-b4ff-95c00aa5acd3)
+
+---
+
+## Production Deployment
+
+Merging the feature branch into `main` triggers the full production deployment pipeline.
+
+![Production Pipeline](https://github.com/user-attachments/assets/c7943f14-9ca8-4c50-bda1-8a66639af91a)
+
+Once the pipeline completes, the updated application is live in production.
+
+---
+## additional details
+
+## Automated Cleanup
+
+Unused Docker containers and images are pruned nightly via a **cron job** on the server host, preventing disk space from accumulating over time.
+
+```cron
+0 3 * * * ubuntu docker system prune -af --volumes
+```
+
+This runs at **03:00 UTC** daily, removing all stopped containers, dangling images, and unused volumes.
+
+## https, bot blocking, anti ddos etc managed by cloudflare
+<img width="1320" height="394" alt="image" src="https://github.com/user-attachments/assets/bd121ba8-4d22-45b0-91af-0b6ef24e6bc6" />
+
+
+
+
+
+
