@@ -1,0 +1,619 @@
+workflow:
+  name: 'Pipeline for branch: $CI_COMMIT_BRANCH' # name of the workflow
+  auto_cancel: # we can interrupt jobs in this pipeline
+    on_new_commit: interruptible # default interruptible is true
+  rules: # rules when to run the pipeline
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH # first rule if the commit is on the default branch
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_COMMIT_REF_NAME =~ /^feature\-.+$/' #only if
+    #branch name feature-... and only for merge requests
+    - when: never  # not running for other cases
+
+
+stages:
+  - build
+  - test
+  - build-d-preview
+  - deploy-preview
+  - accessibility
+  - perfomance
+  - deploy
+
+include:
+  - local: .default_gitlab-ci-configurations.yml
+
+.default_dind_images:
+  image: docker:29.3.1-cli-alpine3.23 # docker cli
+  services:
+    - docker:29.3.1-dind-alpine3.23  # additional docker daemon service
+
+ 
+build_code:
+  stage: build
+
+  inherit:
+    variables:
+      - NUGET_PACKAGES
+      - KEY
+
+  needs: []
+
+  before_script:
+    - dotnet restore # restoring dependencies for all projects in solutions
+  script:
+    - dotnet publish -c Release -o publish # publishing only main application to publish/ folder
+
+  artifacts:
+    when: on_success
+    access: none
+    expire_in: 1 day
+    paths:
+      - "publish/"
+      - "Crypto_Rate_Checker/dockerfile_app"
+      - "Crypto_Rate_Checker/webstatic/"
+  
+  cache:
+    key: $KEY # saving packets to cache specific for every branch
+    paths:
+      - $NUGET_PACKAGES # path where they saved
+
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+      variables:
+        KEY: cache-dependencies-main
+    - when: always
+  
+testing:
+
+  stage: test
+
+  inherit:
+    variables: false
+
+  needs: [build_code]
+  
+  image: busybox:latest
+
+  script:
+    - echo "Some test job will be implemented"
+
+
+build-sonar-mr:
+  stage: test
+  variables:
+    SONAR_USER_HOME: "${CI_PROJECT_DIR}/.sonar"
+    GIT_DEPTH: "0"
+
+  cache:
+    - key: "sonar-cache-$CI_COMMIT_REF_SLUG"
+      paths:
+        - "${SONAR_USER_HOME}/cache"
+      policy: pull-push
+    - key: cache-dependencies-$CI_COMMIT_REF_SLUG  # pulling nuget packages for build in sonarq
+      paths:
+        - $NUGET_PACKAGES
+      policy: pull
+
+  script:
+    - dotnet tool install --global dotnet-sonarscanner
+    - export PATH="$PATH:$HOME/.dotnet/tools"
+
+    - |
+        dotnet sonarscanner begin \
+        /k:"stealline-group_frontend_app_crypto_web_0b8c7d7f-5757-417d-a437-010668967138" \
+        /d:sonar.token="$SONAR_TOKEN" \
+        /d:sonar.host.url="$SONAR_HOST_URL" \
+        /d:sonar.pullrequest.key="$CI_MERGE_REQUEST_IID" \
+        /d:sonar.pullrequest.branch="$CI_COMMIT_REF_NAME" \
+        /d:sonar.pullrequest.base="$CI_MERGE_REQUEST_TARGET_BRANCH_NAME"
+
+    - dotnet build
+
+    - dotnet sonarscanner end /d:sonar.token="$SONAR_TOKEN"
+
+  allow_failure: true
+
+  rules:
+    - if: $CI_PIPELINE_SOURCE == 'merge_request_event'
+
+
+
+build-sonar-main:
+  stage: test
+  variables:
+    SONAR_USER_HOME: "${CI_PROJECT_DIR}/.sonar"
+    GIT_DEPTH: "0"
+
+  cache:
+    - key: "sonar-cache-$CI_COMMIT_REF_SLUG"
+      paths:
+        - "${SONAR_USER_HOME}/cache"
+      policy: pull-push
+    - key: cache-dependencies-main  # pulling nuget packages for build in sonarq
+      paths:
+        - $NUGET_PACKAGES
+      policy: pull
+
+  script:
+    - dotnet tool install --global dotnet-sonarscanner
+    - export PATH="$PATH:$HOME/.dotnet/tools"
+
+    - | 
+        dotnet sonarscanner begin \
+        /k:"stealline-group_frontend_app_crypto_web_0b8c7d7f-5757-417d-a437-010668967138" \
+        /d:sonar.token="$SONAR_TOKEN" \
+        /d:sonar.host.url="$SONAR_HOST_URL"
+
+    - dotnet build
+
+    - dotnet sonarscanner end /d:sonar.token="$SONAR_TOKEN"
+
+  allow_failure: true
+
+  rules:
+    - if: $CI_COMMIT_BRANCH == 'main'
+
+
+build_docker_preview:
+
+  inherit:
+    variables: false
+
+
+  stage: build-d-preview
+
+  variables:
+    GIT_STRATEGY: none
+
+  needs:
+    - job: testing
+      artifacts: false
+    - job: build_code
+      artifacts: true
+    - job: build-sonar-mr
+      artifacts: false
+
+  extends: .default_dind_images
+
+  script:
+    - echo "$CI_REGISTRY_PASSWORD" | docker login -u "$CI_REGISTRY_USER" --password-stdin $CI_REGISTRY 
+    - ls -l
+    - docker pull $CI_REGISTRY_IMAGE/preview_crypto_vault_app:$CI_COMMIT_REF_SLUG || true
+    - | 
+        docker build \
+        --cache-from $CI_REGISTRY_IMAGE/preview_crypto_vault_app:$CI_COMMIT_REF_SLUG \
+        -t $CI_REGISTRY_IMAGE/preview_crypto_vault_app:$CI_COMMIT_REF_SLUG \
+        -t $CI_REGISTRY_IMAGE/preview_crypto_vault_app:$CI_COMMIT_SHA \
+        -f Crypto_Rate_Checker/dockerfile_app \
+        . 
+    - docker push $CI_REGISTRY_IMAGE/preview_crypto_vault_app:$CI_COMMIT_REF_SLUG
+    - docker push $CI_REGISTRY_IMAGE/preview_crypto_vault_app:$CI_COMMIT_SHA
+
+    - |
+      cat > Crypto_Rate_Checker/webstatic/nginx.conf <<EOF
+      server {
+          listen 80;
+
+          location / {
+              root /usr/share/nginx/html;
+              index login.html;
+              try_files \$uri \$uri/ =404;
+          }
+
+          location /api/ {
+              proxy_pass http://cryptovaultapp-${CI_COMMIT_REF_SLUG}:8080;
+              proxy_set_header Host \$host;
+              proxy_set_header X-Real-IP \$remote_addr;
+          }
+      }
+      EOF
+
+    - docker pull $CI_REGISTRY_IMAGE/preview_crypto_vault_static:$CI_COMMIT_REF_SLUG || true
+
+    - | 
+        docker build \
+        --cache-from $CI_REGISTRY_IMAGE/preview_crypto_vault_static:$CI_COMMIT_REF_SLUG \
+        -t $CI_REGISTRY_IMAGE/preview_crypto_vault_static:$CI_COMMIT_REF_SLUG \
+        -t $CI_REGISTRY_IMAGE/preview_crypto_vault_static:$CI_COMMIT_SHA \
+        -f Crypto_Rate_Checker/webstatic/dockerfile_nginx \
+        . 
+    - docker push $CI_REGISTRY_IMAGE/preview_crypto_vault_static:$CI_COMMIT_REF_SLUG
+    - docker push $CI_REGISTRY_IMAGE/preview_crypto_vault_static:$CI_COMMIT_SHA
+
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+
+
+preview_job:
+
+  image: alpine:3.23
+
+  stage: deploy-preview
+  needs:
+    - job: build_docker_preview
+      artifacts: false
+
+  resource_group: preview-${CI_COMMIT_REF_SLUG}
+
+  interruptible: false
+
+  variables:
+    GIT_STRATEGY: none
+
+  before_script:
+      - !reference [.default_before_script,script]
+
+  script:
+      - | # changing resource group policy
+        curl --request PUT \
+        --header "PRIVATE-TOKEN: $GITLAB_TOKEN" \
+        --data "process_mode=oldest_first" \
+        "$CI_API_V4_URL/projects/$CI_PROJECT_ID/resource_groups/preview-${CI_COMMIT_REF_SLUG}"
+
+
+      - export PREVIEW_PASS_HASH=$(htpasswd -nb "$PREVIEW_USER" "$PREVIEW_PASS" | sed -e 's/\$/\$\$/g')
+      - |
+        cat > docker-compose.yml <<EOF
+        services:
+          crypto_vault:
+            networks:
+              - deploy_net
+            container_name: cryptovaultapp-${CI_COMMIT_REF_SLUG}
+            image: $CI_REGISTRY_IMAGE/preview_crypto_vault_app:$CI_COMMIT_SHA
+            environment:
+              PROXYAPI__BASEURL: http://proxy_app_deploy:8080
+
+            depends_on:
+              - static_web
+
+            labels:
+              - "traefik.enable=true"
+              
+            volumes:
+              - hash_db:/app/secret_data
+
+          static_web:
+            networks: 
+              - deploy_net
+            container_name: staticweb-${CI_COMMIT_REF_SLUG}
+            image: $CI_REGISTRY_IMAGE/preview_crypto_vault_static:$CI_COMMIT_SHA
+            labels:
+              - "traefik.enable=true"
+              - "traefik.http.routers.${CI_COMMIT_REF_SLUG}-${CI_COMMIT_SHA}.rule=Host(\`${CI_COMMIT_REF_SLUG}-${CI_COMMIT_SHA}.superapp.website\`)"
+              - "traefik.http.middlewares.${CI_COMMIT_REF_SLUG}-${CI_COMMIT_SHA}-auth.basicauth.users=${PREVIEW_PASS_HASH}"
+              - "traefik.http.services.${CI_COMMIT_REF_SLUG}-${CI_COMMIT_SHA}.loadbalancer.server.port=80"              
+              - "traefik.http.routers.${CI_COMMIT_REF_SLUG}-${CI_COMMIT_SHA}.middlewares=${CI_COMMIT_REF_SLUG}-${CI_COMMIT_SHA}-auth"
+              - "traefik.http.routers.${CI_COMMIT_REF_SLUG}-${CI_COMMIT_SHA}.tls.certresolver=le"
+              - "traefik.http.routers.${CI_COMMIT_REF_SLUG}-${CI_COMMIT_SHA}.tls=true"
+              - "traefik.http.routers.${CI_COMMIT_REF_SLUG}-${CI_COMMIT_SHA}.entrypoints=websecure"
+        networks:
+          deploy_net:
+            external: true
+  
+        volumes:
+          hash_db:
+            external: false
+  
+        EOF
+      - !reference [.default_after_script_filecopy_andrun,script]
+      - |
+          echo "Preview URL: https://${CI_COMMIT_REF_SLUG}-${CI_COMMIT_SHA}.superapp.website/"
+          echo "Login: $PREVIEW_USER / $PREVIEW_PASS"
+
+  environment:
+    name: preview-${CI_COMMIT_REF_SLUG}
+    url: https://${CI_COMMIT_REF_SLUG}-${CI_COMMIT_SHA}.superapp.website/
+    deployment_tier: staging
+    auto_stop_in: 1 hour
+    on_stop: stop_preview_job
+
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+
+a11y:
+
+  needs:
+    - preview_job
+  variables:
+    a11y_urls: https://${CI_COMMIT_REF_SLUG}-${CI_COMMIT_SHA}.superapp.website/
+  stage: accessibility
+  image: "$CI_TEMPLATE_REGISTRY_HOST/gitlab-org/ci-cd/accessibility:6.2.3"
+  script:
+    - /gitlab-accessibility.sh "$a11y_urls"
+  allow_failure: true
+  artifacts:
+    when: always
+    expose_as: 'Accessibility Reports'
+    paths: ['reports/']
+    reports:
+      accessibility: reports/gl-accessibility.json
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $a11y_urls'
+
+browser_performance:
+  allow_failure: true
+  needs:
+    - preview_job
+  stage: perfomance
+  image: docker:27.3
+  variables:
+    URL: 'https://${CI_COMMIT_REF_SLUG}-${CI_COMMIT_SHA}.superapp.website/'
+    SITESPEED_IMAGE: sitespeedio/sitespeed.io
+    SITESPEED_VERSION: 35.0.0
+    SITESPEED_OPTIONS: ''
+    SITESPEED_DOCKER_OPTIONS: ''
+  services:
+    - docker:27.3-dind
+  script:
+    - git clone --branch 2.0.0 https://gitlab.com/gitlab-org/gl-performance.git gitlab-exporter
+    - apk --no-cache add npm
+    - npm install --prefix gitlab-exporter/
+    - mkdir sitespeed-results
+    - |
+      function propagate_env_vars() {
+        CURRENT_ENV=$(printenv)
+
+        for VAR_NAME; do
+          echo $CURRENT_ENV | grep "${VAR_NAME}=" > /dev/null && echo "--env $VAR_NAME "
+        done
+      }
+    - |
+      docker run \
+        $(propagate_env_vars \
+          auto_proxy \
+          https_proxy \
+          http_proxy \
+          no_proxy \
+          AUTO_PROXY \
+          HTTPS_PROXY \
+          HTTP_PROXY \
+          NO_PROXY \
+        ) \
+        $SITESPEED_DOCKER_OPTIONS --shm-size=1g --rm -v "$(pwd)":/sitespeed.io $SITESPEED_IMAGE:$SITESPEED_VERSION --plugins.add ./gitlab-exporter/index.js --cpu --outputFolder sitespeed-results $URL $SITESPEED_OPTIONS
+    - mv sitespeed-results/data/performance.json browser-performance.json
+  artifacts:
+    paths:
+      - sitespeed-results/
+    reports:
+      browser_performance: browser-performance.json
+
+  rules:
+  - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+
+
+
+stop_preview_job:
+
+  image: alpine:3.23
+
+  stage: deploy-preview
+
+  resource_group: preview-${CI_COMMIT_REF_SLUG}
+
+  interruptible: false
+
+  when: manual
+  manual_confirmation: "This will stop your app"
+
+  before_script:
+    - !reference [.default_before_script,script]
+  
+  script:
+    - |
+      ssh $SERVER_ACCOUNT@$SERVER_IP "
+        cd $DEPLOY_PATH &&
+        docker exec cryptovaultapp-${CI_COMMIT_REF_SLUG} \
+          sh -c 'curl -X DELETE \"http://proxy_app_deploy:8080/Home/DeleteDB?uniquehash=\$(tr -d \"\n\" < secret_data/db_hash.txt)\"' &&
+        docker compose down -v --remove-orphans
+      "
+  
+  environment:
+    name: preview-${CI_COMMIT_REF_SLUG}
+    action: stop
+  
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+
+docker_build_main: # deploying main images
+
+  interruptible: false 
+
+  stage: deploy 
+  resource_group: deployment # can`t build in 2 different pipelines
+
+  extends: .default_dind_images
+
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH # only if main branch
+
+  
+  variables:
+      GIT_STRATEGY: none
+      DEPLOY_PATH: /home/deploy-app-cryptovault/crypto-vault/deploy
+
+  needs:
+    - job: testing
+      artifacts: false
+    - job: build_code
+      artifacts: true
+    - job: build-sonar-main
+      artifacts: false
+
+  inherit:
+      variables:
+        - SERVER_IP
+        - SERVER_ACCOUNT
+
+
+  before_script:
+    - !reference [.default_before_script,script]
+  script:
+    - echo "$CI_REGISTRY_PASSWORD" | docker login -u "$CI_REGISTRY_USER" --password-stdin $CI_REGISTRY 
+    - ls -l
+    - docker pull $CI_REGISTRY_IMAGE/deploy_crypto_vault_app:stable || true
+    - | 
+        docker build \
+        --cache-from $CI_REGISTRY_IMAGE/deploy_crypto_vault_app:stable \
+        -t $CI_REGISTRY_IMAGE/deploy_crypto_vault_app:$CI_COMMIT_SHORT_SHA \
+        -f Crypto_Rate_Checker/dockerfile_app \
+        . 
+
+    - docker push $CI_REGISTRY_IMAGE/deploy_crypto_vault_app:$CI_COMMIT_SHORT_SHA
+
+
+    - docker tag $CI_REGISTRY_IMAGE/deploy_crypto_vault_app:stable $CI_REGISTRY_IMAGE/deploy_crypto_vault_app:previous-stable || true
+
+
+    - docker tag $CI_REGISTRY_IMAGE/deploy_crypto_vault_app:$CI_COMMIT_SHORT_SHA $CI_REGISTRY_IMAGE/deploy_crypto_vault_app:latest
+    - docker tag $CI_REGISTRY_IMAGE/deploy_crypto_vault_app:$CI_COMMIT_SHORT_SHA $CI_REGISTRY_IMAGE/deploy_crypto_vault_app:stable
+
+    - docker push $CI_REGISTRY_IMAGE/deploy_crypto_vault_app:latest
+    - docker push $CI_REGISTRY_IMAGE/deploy_crypto_vault_app:stable
+    - docker push $CI_REGISTRY_IMAGE/deploy_crypto_vault_app:previous-stable || true
+
+    - |
+      cat > Crypto_Rate_Checker/webstatic/nginx.conf <<EOF
+      server {
+          listen 80;
+
+          location / {
+              root /usr/share/nginx/html;
+              index login.html;
+              try_files \$uri \$uri/ =404;
+          }
+
+          location /api/ {
+              proxy_pass http://cryptovaultappDeploy:8080;
+              proxy_set_header Host \$host;
+              proxy_set_header X-Real-IP \$remote_addr;
+          }
+      }
+      EOF
+
+    - docker pull $CI_REGISTRY_IMAGE/deploy_crypto_vault_static:stable || true
+
+    - | 
+        docker build \
+        --cache-from $CI_REGISTRY_IMAGE/deploy_crypto_vault_static:stable \
+        -t $CI_REGISTRY_IMAGE/deploy_crypto_vault_static:$CI_COMMIT_SHORT_SHA \
+        -f Crypto_Rate_Checker/webstatic/dockerfile_nginx \
+        . 
+
+    - docker push $CI_REGISTRY_IMAGE/deploy_crypto_vault_static:$CI_COMMIT_SHORT_SHA
+
+    # зберігаємо як previous-stable
+    - docker tag $CI_REGISTRY_IMAGE/deploy_crypto_vault_static:stable $CI_REGISTRY_IMAGE/deploy_crypto_vault_static:previous-stable || true
+
+    # оновлюємо latest і stable
+    - docker tag $CI_REGISTRY_IMAGE/deploy_crypto_vault_static:$CI_COMMIT_SHORT_SHA $CI_REGISTRY_IMAGE/deploy_crypto_vault_static:latest
+    - docker tag $CI_REGISTRY_IMAGE/deploy_crypto_vault_static:$CI_COMMIT_SHORT_SHA $CI_REGISTRY_IMAGE/deploy_crypto_vault_static:stable
+
+    - docker push $CI_REGISTRY_IMAGE/deploy_crypto_vault_static:latest
+    - docker push $CI_REGISTRY_IMAGE/deploy_crypto_vault_static:stable
+    - docker push $CI_REGISTRY_IMAGE/deploy_crypto_vault_static:previous-stable || true
+
+    - |
+        cat > docker-compose.yml <<EOF
+        services:
+          crypto_vault:
+            networks:
+              - deploy_net
+            container_name: cryptovaultappDeploy
+            image: $CI_REGISTRY_IMAGE/deploy_crypto_vault_app:stable
+            environment:
+              PROXYAPI__BASEURL: http://proxy_app_deploy:8080
+
+            depends_on:
+              - static_web
+
+            labels:
+              - "traefik.enable=true"
+              
+            volumes:
+              - hash:/app/secret_data
+
+          static_web:
+            networks: 
+              - deploy_net
+            container_name: staticwebDeploy
+            image: $CI_REGISTRY_IMAGE/deploy_crypto_vault_static:stable
+            labels:
+              - "traefik.enable=true"
+              - "traefik.http.routers.deployApp.rule=Host(\`superapp.website\`)"
+              - "traefik.http.services.deployApp.loadbalancer.server.port=80"              
+              - "traefik.http.routers.deployApp.tls.certresolver=le"
+              - "traefik.http.routers.deployApp.tls=true"
+              - "traefik.http.routers.deployApp.entrypoints=websecure"
+        networks:
+          deploy_net:
+            external: true
+  
+        volumes:
+          hash:
+            external: true
+  
+        EOF
+    - !reference [.default_after_script_filecopy_andrun, script]
+
+  environment:
+    name: DeployApp
+    url: https://superapp.website/
+    deployment_tier: production
+
+rollback_main: 
+ 
+  stage: deploy
+
+  interruptible: false
+  resource_group: deployment
+
+  extends: .default_dind_images
+
+  variables:
+      GIT_STRATEGY: none
+      DEPLOY_PATH: /home/deploy-app-cryptovault/crypto-vault/deploy
+
+  inherit:
+      variables:
+        - SERVER_IP
+        - SERVER_ACCOUNT
+
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
+  when: manual  
+  manual_confirmation: "After running this job your latest deployment will be moved 1 step back"
+
+  before_script:
+    - !reference [.default_before_script,script]
+ 
+  script:
+    - echo "$CI_REGISTRY_PASSWORD" | docker login -u "$CI_REGISTRY_USER" --password-stdin $CI_REGISTRY
+
+    - |
+      docker pull $CI_REGISTRY_IMAGE/deploy_crypto_vault_app:previous-stable || {
+        echo "No previous-stable image found! Aborting rollback. Or check your permissions on pulling that."
+        exit 1
+      }
+    - docker tag $CI_REGISTRY_IMAGE/deploy_crypto_vault_app:previous-stable $CI_REGISTRY_IMAGE/deploy_crypto_vault_app:latest
+    - docker tag $CI_REGISTRY_IMAGE/deploy_crypto_vault_app:previous-stable $CI_REGISTRY_IMAGE/deploy_crypto_vault_app:stable
+    - docker push $CI_REGISTRY_IMAGE/deploy_crypto_vault_app:stable
+    - docker push $CI_REGISTRY_IMAGE/deploy_crypto_vault_app:latest 
+
+    - |
+      docker pull $CI_REGISTRY_IMAGE/deploy_crypto_vault_static:previous-stable || {
+        echo "No previous-stable image found! Aborting rollback. Or check your permissions on pulling that."
+        exit 1
+      }
+    - docker tag $CI_REGISTRY_IMAGE/deploy_crypto_vault_static:previous-stable $CI_REGISTRY_IMAGE/deploy_crypto_vault_static:latest
+    - docker tag $CI_REGISTRY_IMAGE/deploy_crypto_vault_static:previous-stable $CI_REGISTRY_IMAGE/deploy_crypto_vault_static:stable
+    - docker push $CI_REGISTRY_IMAGE/deploy_crypto_vault_static:stable
+    - docker push $CI_REGISTRY_IMAGE/deploy_crypto_vault_static:latest 
+
+    - |
+      ssh $SERVER_ACCOUNT@$SERVER_IP "
+        echo \"$CI_REGISTRY_PASSWORD\" | docker login -u \"$CI_REGISTRY_USER\" --password-stdin $CI_REGISTRY &&
+        cd $DEPLOY_PATH &&
+        docker compose pull &&
+        docker compose up -d --remove-orphans
+      "
+
