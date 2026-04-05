@@ -14,8 +14,6 @@ stages:
   - test
   - build-d-preview
   - deploy-preview
-  - accessibility
-  - perfomance
   - deploy
 
 include:
@@ -308,77 +306,6 @@ preview_job:
 
   rules:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
-
-a11y:
-
-  needs:
-    - preview_job
-  variables:
-    a11y_urls: https://${CI_COMMIT_REF_SLUG}-${CI_COMMIT_SHA}.superapp.website/
-  stage: accessibility
-  image: "$CI_TEMPLATE_REGISTRY_HOST/gitlab-org/ci-cd/accessibility:6.2.3"
-  script:
-    - /gitlab-accessibility.sh "$a11y_urls"
-  allow_failure: true
-  artifacts:
-    when: always
-    expose_as: 'Accessibility Reports'
-    paths: ['reports/']
-    reports:
-      accessibility: reports/gl-accessibility.json
-  rules:
-    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $a11y_urls'
-
-browser_performance:
-  allow_failure: true
-  needs:
-    - preview_job
-  stage: perfomance
-  image: docker:27.3
-  variables:
-    URL: 'https://${CI_COMMIT_REF_SLUG}-${CI_COMMIT_SHA}.superapp.website/'
-    SITESPEED_IMAGE: sitespeedio/sitespeed.io
-    SITESPEED_VERSION: 35.0.0
-    SITESPEED_OPTIONS: ''
-    SITESPEED_DOCKER_OPTIONS: ''
-  services:
-    - docker:27.3-dind
-  script:
-    - git clone --branch 2.0.0 https://gitlab.com/gitlab-org/gl-performance.git gitlab-exporter
-    - apk --no-cache add npm
-    - npm install --prefix gitlab-exporter/
-    - mkdir sitespeed-results
-    - |
-      function propagate_env_vars() {
-        CURRENT_ENV=$(printenv)
-
-        for VAR_NAME; do
-          echo $CURRENT_ENV | grep "${VAR_NAME}=" > /dev/null && echo "--env $VAR_NAME "
-        done
-      }
-    - |
-      docker run \
-        $(propagate_env_vars \
-          auto_proxy \
-          https_proxy \
-          http_proxy \
-          no_proxy \
-          AUTO_PROXY \
-          HTTPS_PROXY \
-          HTTP_PROXY \
-          NO_PROXY \
-        ) \
-        $SITESPEED_DOCKER_OPTIONS --shm-size=1g --rm -v "$(pwd)":/sitespeed.io $SITESPEED_IMAGE:$SITESPEED_VERSION --plugins.add ./gitlab-exporter/index.js --cpu --outputFolder sitespeed-results $URL $SITESPEED_OPTIONS
-    - mv sitespeed-results/data/performance.json browser-performance.json
-  artifacts:
-    paths:
-      - sitespeed-results/
-    reports:
-      browser_performance: browser-performance.json
-
-  rules:
-  - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
-
 
 
 stop_preview_job:
