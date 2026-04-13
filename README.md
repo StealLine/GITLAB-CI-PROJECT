@@ -295,11 +295,48 @@ Unused Docker containers and images are pruned nightly via a **cron job** on the
 ```cron
 0 3 * * * ubuntu docker system prune -af --volumes
 ```
-
 This runs at **03:00 UTC** daily, removing all stopped containers, dangling images, and unused volumes.
+
+---
+
+`It would also be useful for the stop_env job to clean up the directory it created — essentially removing the directory along with all its contents, and optionally storing log information in /var/log for monitoring purposes.`
 
 ## https, bot blocking, anti ddos etc managed by cloudflare
 <img width="1320" height="394" alt="image" src="https://github.com/user-attachments/assets/bd121ba8-4d22-45b0-91af-0b6ef24e6bc6" />
+
+## Website previews & tests
+
+### Authentication
+
+Register page
+![Register page](https://github.com/user-attachments/assets/95a9dd4b-8ad4-45c2-adae-89625ba9e9f8)
+
+Main page
+![Login page](https://github.com/user-attachments/assets/f10ec3a8-37be-4b46-9a19-921f340f3ef0)
+
+### Crypto prices
+
+Click on any icon to see live prices.
+
+![Crypto list](https://github.com/user-attachments/assets/00cc016d-f6e5-45af-941c-0bf3c6cc4f3b)
+![Crypto detail](https://github.com/user-attachments/assets/61b966b6-9c45-4ec8-81d1-c4144a38b1f3)
+
+### PageSpeed insights
+
+![PageSpeed results](https://github.com/user-attachments/assets/84937982-c106-4195-8b60-a61081f7e039)
+
+---
+
+> **Note:** There is a lot more that can be implemented — logging, high availability, database replication, etc.
+> This will be addressed in future projects. For preview environments, subdomains like `preview.domain.com`
+> are preferable over `preview-domain.com`.
+
+
+**THANKS FOR READING!**
+ 
+
+
+
 
 
 
