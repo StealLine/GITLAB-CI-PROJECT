@@ -172,7 +172,7 @@ See the `compose.yml` file in this repository for the full Traefik setup and exp
 
 
 
-# Frontend — Crypto Rate Checker
+#  Frontend — [CI/CD pipeline](https://github.com/StealLine/Frontend-Crypto-Rate-Checker)
 
 > *This part of the application's DevOps cycle is built on the same principles as described in the previous section. Only the key aspects are covered here — for full implementation details, feel free to open a pull request to the repository.*
 
