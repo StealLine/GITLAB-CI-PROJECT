@@ -12,7 +12,7 @@ This project consists of **two applications**:
 >
 > The GitLab CI configuration and deployment logic here are **not intended for production use**. Some variables are intentionally hardcoded and certain values may be exposed. The primary goal was to demonstrate the ability to design and implement a **simplified end-to-end DevOps workflow**.
 >
-> Implementing a fully production-ready infrastructure (proper secret management, environment separation, IaC, etc.) would significantly exceed the scope of a single-developer pet project. **Intentional simplifications and trade-offs were made** to keep the project manageable while showcasing core CI/CD concepts. AND THIS IS MY FIRST GITLAB PROJECT!!!
+> Implementing a fully production-ready infrastructure (proper secret management, environment separation, IaC, etc.) would significantly exceed the scope of a single-developer pet project. **Intentional simplifications and trade-offs were made** to keep the project manageable while showcasing core CI/CD concepts. AND THIS IS MY FIRST GITLAB LARGE PROJECT!!!
 
 ---
 
