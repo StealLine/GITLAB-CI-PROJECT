@@ -56,9 +56,13 @@ include:
 
 *This simply pulls all pipeline configurations from the CI/CD configuration project.*
 
+### And here is the project where configuration files stored, so Developer Push Target repo just references to this repo
+<img width="1432" height="638" alt="image" src="https://github.com/user-attachments/assets/34b08420-1f24-4248-b729-3e8fe5eb7e92" />
+
+
 ---
 
-## GitLab CI/CD Variables
+## GitLab CI/CD Variables ( in Developer Push Target repo )
 
 ![CI/CD Variables](https://github.com/user-attachments/assets/d89c267d-59dc-4564-9e6c-d75222ee6cef)
 
